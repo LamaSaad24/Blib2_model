@@ -1,0 +1,26 @@
+data_dir: data/processed
+image_dir: data/raw/images
+
+model_dir: outputs/saved_models
+
+latest_step: 0
+
+use_gpu: true #true
+epochs: 2 #300
+batch_size: 16  #16
+lr: 0.00001
+embed_dim: 768
+
+blip2_model_id: Salesforce/blip2-flan-t5-xl
+
+num_queries: 12 #32 # عدد query tokens (BLIP/QFormer style)
+
+lora_rank: 16
+lora_alpha: 32
+lora_dropout: 0.5
+
+scheduler: cosine_with_warmup
+weight_decay: 0.5
+warmup_steps: 1000
+
+recall_ks: [1, 10, 50]
