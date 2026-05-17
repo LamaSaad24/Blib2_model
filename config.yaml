@@ -3,7 +3,7 @@ image_dir: data/raw/images
 
 model_dir: outputs/saved_models
 
-latest_step: 0
+latest_step: 750
 
 use_gpu: true #true
 epochs: 2 #300
