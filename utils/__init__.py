@@ -7,6 +7,7 @@ __all__ = [
     "CrossBatchMemory", 
     "EarlyStopping", 
     "check_tensor", 
+    "restore_checkpoint",
     "save_model_checkpoint", 
     "save_final_model"
     ]

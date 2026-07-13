@@ -50,7 +50,7 @@ train(
     weight_decay=cfg['weight_decay'],
     warmup_steps=cfg['warmup_steps'],
     device=device,
-    start_step= cfg['latest_step']
+    start_step= 0
      ## <--- إخبار الدالة أن تبدأ من الخطوة 3000 متجاهلة ما قبلها!
 )
 

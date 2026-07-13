@@ -2,8 +2,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .memory import CrossBatchMemory
-
+from utils import (CrossBatchMemory)
 
 class InfoNCELoss(nn.Module):
     """
