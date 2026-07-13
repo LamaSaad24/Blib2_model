@@ -17,7 +17,8 @@ def train(
     weight_decay,
     warmup_steps,
     device,
-    start_step=0 # قيمة افتراضيه
+    start_step=0, # قيمة افتراضيه
+    resume_state=None,  # جديد: dict فيها optimizer/scheduler/logit_scale/xbm_memory محفوظين سابقاً
 ):
     model = model.to(device,  dtype=torch.bfloat16)
 
@@ -33,7 +34,32 @@ def train(
     )
 
     # Loss Function (L = L_LM + w * L_InfoNCE)
-    criterion = ComposedRetrievalLoss(omega=1.0)
+    # use_xbm=True بيفعّل الذاكرة اللي بتزوّد عدد الـ negatives بدون batch أكبر
+    criterion = ComposedRetrievalLoss(
+        omega=1.0,
+        use_xbm=True,
+        xbm_capacity=65536,   # زي الورقة بالضبط (memory.py تبعك)
+        embed_dim=768,        # لازم يطابق embed_dim بالـ config.yaml
+        device=device,
+    )
+    criterion = criterion.to(device)
+
+    # ============================================================
+    # استئناف حالة التدريب (optimizer + scheduler + logit_scale + XBM)
+    # ============================================================
+    if resume_state is not None:
+        if "optimizer" in resume_state:
+            optimizer.load_state_dict(resume_state["optimizer"])
+            print("[Resume] ✅ optimizer state restored")
+        if "scheduler" in resume_state:
+            scheduler.load_state_dict(resume_state["scheduler"])
+            print("[Resume] ✅ scheduler state restored")
+        if "logit_scale" in resume_state:
+            criterion.info_nce.logit_scale.data = resume_state["logit_scale"].to(device)
+            print("[Resume] ✅ logit_scale (temperature) restored")
+        if "xbm_memory" in resume_state:
+            criterion.info_nce.load_state_dict_extra(resume_state["xbm_memory"])
+            print("[Resume] ✅ XBM memory restored")
 
     #early_stopping = EarlyStopping(patience=3)
     #torch.autograd.set_detect_anomaly(True) # Added for debugging NaNs
@@ -60,21 +86,14 @@ def train(
             text = batch["mod_texts"]        # text queries
             target_text = batch["trg_captions"]  # target descriptions
 
-            #helper
-            #print("Texts:", text)
-            #print("Target Text:", target_text)
-            #print("Batch size:", len(text))
-
             optimizer.zero_grad(set_to_none=True)# before forward
 
-            #with torch.cuda.amp.autocast(dtype=dtype):
             outputs = model(
                 image_ref=image_ref,
                 image_target=image_target,
                 modification_text=text,
                 target_captions=target_text # لتوليد Text Loss
             )
-
 
             query_emb = outputs["query_embedding"]
             target_emb = outputs["target_embedding"]
@@ -86,10 +105,6 @@ def train(
                 target_emb,
                 lm_loss_from_model
             )
-            #helper function
-            #check_tensor("query_emb", query_emb)
-            #check_tensor("target_emb", target_emb)
-            #print("LM Loss:", lm_loss_from_model.item())
 
             loss.backward()
             optimizer.step()
@@ -98,23 +113,19 @@ def train(
             # save checkpoint
             global_step += 1 # زيادة العداد بمقدار 1 مع كل دفعة (Batch)
 
-            # استدعاء التابع بكل أناقة هنا! 👇
+            # ✅ الآن منمرر optimizer/scheduler/criterion عشان يتحفظوا كمان
             if global_step % save_every_n_steps == 0:
-                save_model_checkpoint(model, global_step)
-
-            #فحص الاخطاء
-            for name, param in model.named_parameters():
-              if param.grad is not None:
-                  if torch.isnan(param.grad).any():
-                      print(f"NaN gradient in {name}")
-                      break
-
+                save_model_checkpoint(
+                    model, global_step,
+                    optimizer=optimizer,
+                    scheduler=scheduler,
+                    criterion=criterion,
+                )
 
             # Logging
             epoch_total_loss += loss.item()
             epoch_lm_loss += lm_loss.item()
             epoch_contrastive_loss += contrastive_loss.item()
-
 
             pbar.set_postfix({
                 "total loss": f"{loss.item():.4f}",
@@ -122,16 +133,7 @@ def train(
                 "contrastive loss (InfoNCE)": f"{contrastive_loss.item():.4f}"
             })
 
-            #helper function
-            #print("Total Loss:", loss.item())
-            #print("Contrastive Loss:", contrastive_loss.item())
-
-            if not torch.isfinite(loss):
-              print("LOSS EXPLODED!")
-              print("Texts:", text)
-              print("Target Texts:", target_text)
-              break
-
+        print("starting validation......")
         # ---------------------------
         # VALIDATION
         # ---------------------------
@@ -141,13 +143,13 @@ def train(
         val_contrastive_loss = 0
 
         with torch.no_grad():
-            for batch in valloader:
+            val_pbar = tqdm(valloader, desc="Validating")
+            for batch in val_pbar:
                 image_ref = batch["ref_images"]
                 image_target = batch["trg_images"]
                 text = batch["mod_texts"]
                 target_text = batch["trg_captions"]
 
-                #with torch.cuda.amp.autocast(dtype=dtype):
                 outputs = model(
                     image_ref=image_ref,
                     image_target=image_target,
@@ -169,17 +171,17 @@ def train(
                 val_lm_loss += lm_loss.item()
                 val_contrastive_loss += contrastive_loss.item()
 
+                val_pbar.set_postfix({
+                    "val_loss"  : f"{loss.item():.4f}",
+                    "val_lm"    : f"{lm_loss.item():.4f}",
+                    "val_InfoNCE": f"{contrastive_loss.item():.4f}"
+                })
+
         val_total_loss /= len(valloader)
         val_lm_loss /= len(valloader)
         val_contrastive_loss /= len(valloader)
 
         print(f"\n[Validation] Total Loss: {val_total_loss:.4f} | LM Loss: {val_lm_loss:.4f} | InfoNCE: {val_contrastive_loss:.4f}")
-
-        # ---- EARLY STOPPING ----
-        """early_stopping(val_total_loss, model)
-        if early_stopping.early_stop:
-            print("Early stopping triggered!")
-            break"""
 
         print(
                 f"[Epoch {epoch+1}] "
@@ -187,3 +189,7 @@ def train(
                 f"LM: {epoch_lm_loss/len(trainloader):.4f} | "
                 f"InfoNCE: {epoch_contrastive_loss/len(trainloader):.4f}"
             )
+    print("ending of train")
+
+    # نرجع criterion عشان main.py يقدر يحفظ logit_scale النهائي بالـ save_final_model
+    return criterion
