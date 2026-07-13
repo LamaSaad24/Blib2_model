@@ -11,6 +11,20 @@
 5- python scripts/create_small_triplet_subset.py 
 
 ------------------------
+python --versoin 3.10.11
+
+1- create Virtual Environment
+python -m venv venv
+
+2- activate Environment
+venv/Scripts/activate
+
+3- install libs
+pip install -r requirements.txt
+for GPU
+pip install torch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 --index-url https://download.pytorch.org/whl/cu118
+4- out
+deactivate
 1- venv\Scripts\activate.ps1
 ---------------
 استخراج ميزات CLIP (على العينة الصغرى)
