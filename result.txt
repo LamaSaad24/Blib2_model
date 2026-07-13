@@ -1,0 +1,133 @@
+⚡ master ~/fashion200k_blip python main_v2.py
+Fetching 2 files: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 2/2 [00:00<00:00, 6600.01it/s]
+Download complete: : 0.00B [00:00, ?B/s]                                                                                                            | 0/2 [00:00it/s]
+Loading weights: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1289/1289 [00:00<00:00, 1705.24it/s]
+The tied weights mapping and config for this model specifies to tie language_model.shared.weight to language_model.lm_head.weight, but both are present in the checkpoints with different values, so we will NOT tie them. You should update the config with `tie_word_embeddings=False` to silence this warning.
+blip2 model loaded successfull
+model dtype: torch.bfloat16
+Restor the model from step: outputs/Blip2_model_Checkpoints_small/step_1250
+
+The model was successfully restored
+dataset created successfull
+dataloader created successfull
+Epoch 1/5:  20%|█████████▊                                       | 249/1250 [01:55<07:36,  2.19it/s, total loss=4.8125, lm loss=2.5781, contrastive loss (InfoNCE)=2.2500]/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/peft/utils/save_and_load.py:295: UserWarning: Could not find a config file in  - will assume that the vocabulary was not modified.
+
+
+[Checkpoint] ✅ the model was saved securely at 250 : outputs/Blip2_model_Checkpoints_small/step_250
+Epoch 1/5:  20%|█████████▉                                       | 252/1250 [01:57<08:31,  1.95it/s, total loss=4.9375, lm loss=2.5156, contrastive loss (InfoNCE)=2.4062]
+Epoch 1/5:  40%|███████████████████▌                             | 499/1250 [03:52<05:20,  2.35it/s, total loss=4.7500, lm loss=2.3750, contrastive loss (InfoNCE)=2.3750]
+[Checkpoint] ✅ the model was saved securely at 500 : outputs/Blip2_model_Checkpoints_small/step_500
+Epoch 1/5:  60%|█████████████████████████████▎                   | 749/1250 [05:51<03:34,  2.33it/s, total loss=5.3125, lm loss=2.9844, contrastive loss (InfoNCE)=2.3438]
+[Checkpoint] ✅ the model was saved securely at 750 : outputs/Blip2_model_Checkpoints_small/step_750
+Epoch 1/5:  80%|███████████████████████████████████████▏         | 999/1250 [07:49<02:03,  2.03it/s, total loss=4.3750, lm loss=2.2500, contrastive loss (InfoNCE)=2.1250]
+[Checkpoint] ✅ the model was saved securely at 1000 : outputs/Blip2_model_Checkpoints_small/step_1000
+Epoch 1/5: 100%|███████████████████████████████████████████████▉| 1249/1250 [09:49<00:00,  2.01it/s, total loss=4.3125, lm loss=2.0938, contrastive loss (InfoNCE)=2.2031]
+[Checkpoint] ✅ the model was saved securely at 1250 : outputs/Blip2_model_Checkpoints_small/step_1250
+Epoch 1/5: 100%|████████████████████████████████████████████████| 1250/1250 [09:49<00:00,  2.12it/s, total loss=4.6562, lm loss=2.6719, contrastive loss (InfoNCE)=1.9844]
+starting validation......
+Validating: 100%|███████████████████████████████████████████████████████████████████| 624/624 [04:46<00:00,  2.18it/s, val_loss=4.3750, val_lm=2.3281, val_InfoNCE=2.0625]
+
+[Validation] Total Loss: 4.6625 | LM Loss: 2.5933 | InfoNCE: 2.0694
+[Epoch 1] Train Total: 4.9164 | LM: 2.7083 | InfoNCE: 2.2082
+Epoch 2/5:  20%|█████████▊                                       | 249/1250 [02:01<07:48,  2.14it/s, total loss=4.9688, lm loss=2.8906, contrastive loss (InfoNCE)=2.0781]
+[Checkpoint] ✅ the model was saved securely at 1500 : outputs/Blip2_model_Checkpoints_small/step_1500
+Epoch 2/5:  40%|███████████████████▌                             | 499/1250 [04:00<05:30,  2.27it/s, total loss=5.0625, lm loss=2.8438, contrastive loss (InfoNCE)=2.2031]
+[Checkpoint] ✅ the model was saved securely at 1750 : outputs/Blip2_model_Checkpoints_small/step_1750
+Epoch 2/5:  60%|█████████████████████████████▎                   | 749/1250 [05:59<04:07,  2.03it/s, total loss=5.1875, lm loss=3.0469, contrastive loss (InfoNCE)=2.1250]
+[Checkpoint] ✅ the model was saved securely at 2000 : outputs/Blip2_model_Checkpoints_small/step_2000
+Epoch 2/5:  80%|███████████████████████████████████████▏         | 999/1250 [07:57<01:59,  2.10it/s, total loss=4.6562, lm loss=2.5156, contrastive loss (InfoNCE)=2.1406]
+[Checkpoint] ✅ the model was saved securely at 2250 : outputs/Blip2_model_Checkpoints_small/step_2250
+Epoch 2/5: 100%|███████████████████████████████████████████████▉| 1249/1250 [09:55<00:00,  2.23it/s, total loss=4.3750, lm loss=2.2969, contrastive loss (InfoNCE)=2.0781]
+[Checkpoint] ✅ the model was saved securely at 2500 : outputs/Blip2_model_Checkpoints_small/step_2500
+Epoch 2/5: 100%|████████████████████████████████████████████████| 1250/1250 [09:56<00:00,  2.10it/s, total loss=4.8125, lm loss=2.6250, contrastive loss (InfoNCE)=2.1875]
+starting validation......
+Validating: 100%|███████████████████████████████████████████████████████████████████| 624/624 [05:12<00:00,  1.99it/s, val_loss=4.4062, val_lm=2.3281, val_InfoNCE=2.0781]
+
+[Validation] Total Loss: 4.6630 | LM Loss: 2.5933 | InfoNCE: 2.0695
+[Epoch 2] Train Total: 4.8964 | LM: 2.7135 | InfoNCE: 2.1830
+Epoch 3/5:  20%|█████████▊                                       | 249/1250 [01:58<07:47,  2.14it/s, total loss=5.3125, lm loss=3.1875, contrastive loss (InfoNCE)=2.1250]
+[Checkpoint] ✅ the model was saved securely at 2750 : outputs/Blip2_model_Checkpoints_small/step_2750
+Epoch 3/5:  40%|███████████████████▌                             | 499/1250 [04:01<05:52,  2.13it/s, total loss=4.8750, lm loss=2.6250, contrastive loss (InfoNCE)=2.2500]
+[Checkpoint] ✅ the model was saved securely at 3000 : outputs/Blip2_model_Checkpoints_small/step_3000
+Epoch 3/5:  60%|█████████████████████████████▎                   | 749/1250 [06:06<04:07,  2.02it/s, total loss=5.3750, lm loss=3.3125, contrastive loss (InfoNCE)=2.0625]
+[Checkpoint] ✅ the model was saved securely at 3250 : outputs/Blip2_model_Checkpoints_small/step_3250
+Epoch 3/5:  80%|███████████████████████████████████████▏         | 999/1250 [08:07<01:48,  2.31it/s, total loss=4.7812, lm loss=2.6719, contrastive loss (InfoNCE)=2.1094]
+[Checkpoint] ✅ the model was saved securely at 3500 : outputs/Blip2_model_Checkpoints_small/step_3500
+Epoch 3/5: 100%|███████████████████████████████████████████████▉| 1249/1250 [10:09<00:00,  2.15it/s, total loss=5.0625, lm loss=2.7969, contrastive loss (InfoNCE)=2.2500]
+[Checkpoint] ✅ the model was saved securely at 3750 : outputs/Blip2_model_Checkpoints_small/step_3750
+Epoch 3/5: 100%|████████████████████████████████████████████████| 1250/1250 [10:09<00:00,  2.05it/s, total loss=5.1875, lm loss=3.0156, contrastive loss (InfoNCE)=2.1562]
+starting validation......
+Validating: 100%|███████████████████████████████████████████████████████████████████| 624/624 [04:42<00:00,  2.21it/s, val_loss=4.4062, val_lm=2.3281, val_InfoNCE=2.0781]
+
+[Validation] Total Loss: 4.6634 | LM Loss: 2.5933 | InfoNCE: 2.0698
+
+[Epoch 3] Train Total: 4.8906 | LM: 2.7055 | InfoNCE: 2.1846
+Epoch 4/5:  20%|█████████▊                                       | 249/1250 [01:59<07:56,  2.10it/s, total loss=4.2812, lm loss=2.0938, contrastive loss (InfoNCE)=2.1875]
+[Checkpoint] ✅ the model was saved securely at 4000 : outputs/Blip2_model_Checkpoints_small/step_4000
+Epoch 4/5:  40%|███████████████████▌                             | 499/1250 [04:00<05:55,  2.11it/s, total loss=5.2500, lm loss=3.0938, contrastive loss (InfoNCE)=2.1562]
+[Checkpoint] ✅ the model was saved securely at 4250 : outputs/Blip2_model_Checkpoints_small/step_4250
+Epoch 4/5:  60%|█████████████████████████████▎                   | 749/1250 [06:05<04:08,  2.01it/s, total loss=4.9062, lm loss=2.7500, contrastive loss (InfoNCE)=2.1562]
+[Checkpoint] ✅ the model was saved securely at 4500 : outputs/Blip2_model_Checkpoints_small/step_4500
+Epoch 4/5:  80%|███████████████████████████████████████▏         | 999/1250 [08:07<01:57,  2.13it/s, total loss=4.7500, lm loss=2.9062, contrastive loss (InfoNCE)=1.8281]
+[Checkpoint] ✅ the model was saved securely at 4750 : outputs/Blip2_model_Checkpoints_small/step_4750
+Epoch 4/5: 100%|███████████████████████████████████████████████▉| 1249/1250 [10:08<00:00,  2.09it/s, total loss=5.2500, lm loss=3.1875, contrastive loss (InfoNCE)=2.0625]
+[Checkpoint] ✅ the model was saved securely at 5000 : outputs/Blip2_model_Checkpoints_small/step_5000
+Epoch 4/5: 100%|████████████████████████████████████████████████| 1250/1250 [10:09<00:00,  2.05it/s, total loss=5.1562, lm loss=2.8594, contrastive loss (InfoNCE)=2.2969]
+starting validation......
+Validating: 100%|███████████████████████████████████████████████████████████████████| 624/624 [04:37<00:00,  2.25it/s, val_loss=4.4062, val_lm=2.3281, val_InfoNCE=2.0781]
+
+[Validation] Total Loss: 4.6633 | LM Loss: 2.5933 | InfoNCE: 2.0695
+
+------------------
+
+⚡ master ~/fashion200k_blip python test_search.py
+⏳ Loading BLIP-2...
+Fetching 2 files: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 2/2 [00:00<00:00, 3106.89it/s]
+Download complete: : 0.00B [00:00, ?B/s]                                                                                                            | 0/2 [00:00<?, ?it/s]
+Loading weights: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1289/1289 [00:00<00:00, 1523.26it/s]
+The tied weights mapping and config for this model specifies to tie language_model.shared.weight to language_model.lm_head.weight, but both are present in the checkpoints with different values, so we will NOT tie them. You should update the config with `tie_word_embeddings=False` to silence this warning.
+✅ BLIP-2 Ready
+⏳    Restore model from step 5000...
+✅ Restored model successfully 
+⏳ calculate embeddings for images...
+✅ 200  image ready
+
+🔍 Refrence image : women/tops/shirts/91111821/91111821_3.jpeg
+📝  text modification: replace black with blue
+🎯  Target Image: women/tops/shirts/91422183/91422183_2.jpeg
+/teamspace/studios/this_studio/fashion200k_blip/test_search.py:198: UserWarning: Glyph 9989 (\N{WHITE HEAVY CHECK MARK}) missing from current font.
+  plt.tight_layout()
+
+📊  Evaluation Results:      paper
+  Recall@ 1 = 2.00%
+  Recall@10 = 11.20%         71.4
+  Recall@50 = 26.20%         91.6
+
+
+  ---------------
+  الورقة:
+✅ 172,000 صورة تدريب
+✅ 300 epochs
+✅ 8 GPUs
+✅ batch_size = 4096
+
+Me:
+⚡ 10,000 صورة بس
+⚡ 5 epochs
+⚡ GPU وحدة
+⚡ batch_size = 8
+
+Method      R@10	R@50	Average
+RN [42] 	40.5	62.4	51.4
+MRN [22] 	40.0	61.9	50.9
+FiLM [35] 	39.5	61.9	50.7
+TIRG [46] 	42.5	63.8	53.2
+CosMo [25] 	50.4	69.3	59.8
+FashionVLP [16] 	49.9	70.5	60.2
+VAL [10] 	53.8	73.3	63.6
+Ours	    71.4	91.6	81.5
+====================================
+⚡ 50,000 صورة بس
+⚡ 10 epochs
+⚡ GPU وحدة
+⚡ batch_size = 32
