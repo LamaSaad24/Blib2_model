@@ -4,8 +4,8 @@ from peft import PeftModel
 
 # 1. تحديد أحدث مجلد قمنا بحفظه
 
-latest_step = x
-latest_checkpoint = f"/content/drive/MyDrive/Blip2_model_Checkpoints/step_{latest_step}"
+latest_step = cfg['latest_step']
+latest_checkpoint = f"outputs/Blip2_model_Checkpoints/step_{latest_step}"
 
 print(f"جاري استعادة النموذج من الخطوة: {latest_checkpoint}")
 
@@ -24,4 +24,4 @@ model.retrieval_head.load_state_dict(
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = model.to(device, dtype=torch.bfloat16)
 
-print("تم استعادة النموذج بنجاح! جاهز لإكمال التدريب.")
+print("we get saved model successfully")
