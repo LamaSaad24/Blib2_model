@@ -11,7 +11,7 @@
 5- python scripts/create_small_triplet_subset.py 
 
 ------------------------
-python --versoin 3.10.11
+python --version 3.10.11
 
 1- create Virtual Environment
 python -m venv venv
