@@ -12,7 +12,7 @@ class InfoNCELoss(nn.Module):
     ✨ محدّثة: تدعم Cross-Batch Memory (XBM) عن طريق memory.py
     لزيادة عدد الـ negatives بدون الحاجة لـ batch size كبير.
     """
-    def __init__(self, init_temperature=0.07, use_xbm=True,
+    def __init__(self, init_temperature=0.07, use_xbm=False,
                  xbm_capacity=65536, embed_dim=768, device="cuda"):
         super().__init__()
         # Learnable scaling parameter (tau) as mentioned in the paper

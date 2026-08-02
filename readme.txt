@@ -23,6 +23,7 @@ venv/Scripts/activate
 pip install -r requirements.txt
 for GPU
 pip install torch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 --index-url https://download.pytorch.org/whl/cu118
+pip install transformers==4.44.2 tokenizers==0.19.1 huggingface_hub==0.24.6 safetensors==0.4.3
 4- out
 deactivate
 1- venv\Scripts\activate.ps1

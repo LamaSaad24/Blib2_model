@@ -29,7 +29,7 @@ if __name__ == "__main__":
     available_images = load_available_images(images_root)
     print(f"📦 Found {len(available_images):,} images in dataset\n")
 
-    files = ["train_triplets.csv"]
+    files = ["train_triplets.csv","test_triplets.csv","val_triplets.csv"]
     
     total_missing = 0
 

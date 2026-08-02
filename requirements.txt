@@ -21,7 +21,7 @@ opencv-python>=4.8
 
 
 # ====== HuggingFace / LLM ======
-transformers>=4.40
+transformers>=4.44.2
 accelerate>=0.30
 peft>=0.11
 sentencepiece

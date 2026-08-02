@@ -11,6 +11,7 @@ from .retrieval_head import RetrievalHead
 
 cfg = yaml.safe_load(open("config.yaml", "r"))
 
+
 class FullModel(nn.Module):
     def __init__(self, processor,blip2, embed_dim):
         super().__init__()

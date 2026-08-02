@@ -117,6 +117,8 @@ Me:
 ⚡ GPU وحدة
 ⚡ batch_size = 8
 
+
+
 Method      R@10	R@50	Average
 RN [42] 	40.5	62.4	51.4
 MRN [22] 	40.0	61.9	50.9
