@@ -19,6 +19,8 @@ def train(
     device,
     start_step=0, # قيمة افتراضيه
     resume_state=None,  # جديد: dict فيها optimizer/scheduler/logit_scale/xbm_memory محفوظين سابقاً
+    push_to_hub=False,          
+    hub_repo_id=None,
 ):
     model = model.to(device,  dtype=torch.bfloat16)
 
@@ -40,7 +42,7 @@ def train(
     """
     optimizer = AdamW([
                 {"params": [p for n,p in model.named_parameters() if p.requires_grad and "retrieval_head" not in n], "lr": lr},   # LoRA
-                {"params": model.retrieval_head.parameters(), "lr": lr},   # رأس الاسترجاع — LR أعلى بـ10x
+                {"params": model.retrieval_head.parameters(), "lr": lr*10},   # رأس الاسترجاع — LR أعلى بـ10x
             ], weight_decay=weight_decay)
 
     total_steps = epochs * len(trainloader)
@@ -135,6 +137,8 @@ def train(
                     optimizer=optimizer,
                     scheduler=scheduler,
                     criterion=criterion,
+                    push_to_hub=push_to_hub,
+                    hub_repo_id=hub_repo_id
                 )
 
             # Logging

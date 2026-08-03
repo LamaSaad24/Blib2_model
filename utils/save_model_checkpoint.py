@@ -4,7 +4,7 @@ import torch
 
 
 def save_model_checkpoint(model, step, optimizer=None, scheduler=None,
-                           criterion=None, base_dir="outputs/Blip2_model_Checkpoints_small"):
+                           criterion=None, base_dir="outputs/Blip2_model_Checkpoints_small", push_to_hub=False, hub_repo_id=None):
     """
     تابع لحفظ حالة التدريب الكاملة بشكل مرحلي:
     1. أوزان LoRA
@@ -16,6 +16,11 @@ def save_model_checkpoint(model, step, optimizer=None, scheduler=None,
 
     ملاحظة: غيّرت اسم المجلد الافتراضي رجّعته "Blip2_model_Checkpoints_small"
     (بدون _v2) عشان يطابق المسار اللي main_v2.py بيدور فيه وقت الاسترجاع.
+    """
+    """
+    يحفظ حالة التدريب الكاملة محلياً، وبشكل اختياري يرفعها لـ HuggingFace Hub
+    كنسخة احتياطية -- مفيد جداً على Kaggle لأن الجلسة ممكن تنقطع بأي لحظة
+    وتخسر كل شي بـ /kaggle/working لو ما رفعتها لمكان خارجي.
     """
     save_path = os.path.join(base_dir, f"step_{step}")
     os.makedirs(save_path, exist_ok=True)
@@ -43,3 +48,23 @@ def save_model_checkpoint(model, step, optimizer=None, scheduler=None,
     torch.save(training_state, os.path.join(save_path, "training_state.pth"))
 
     print(f"\n[Checkpoint] ✅ the model was saved securely at {step} : {save_path}")
+
+
+    
+    # ============================================================
+    # ✅ نسخة احتياطية على HuggingFace Hub (حماية من انقطاع Kaggle)
+    # ============================================================
+    if push_to_hub and hub_repo_id is not None:
+        try:
+            from huggingface_hub import upload_folder
+            upload_folder(
+                folder_path=save_path,
+                repo_id=hub_repo_id,
+                path_in_repo=f"step_{step}",
+                repo_type="model",
+            )
+            print(f"[Checkpoint] ☁️ backed up to HF Hub: {hub_repo_id}/step_{step}")
+        except Exception as e:
+            # ما بدنا نوقف التدريب لو فشل الرفع (مشكلة إنترنت مؤقتة مثلاً)
+            print(f"[Checkpoint] ⚠️ فشل الرفع لـ HF Hub (رح نكمل التدريب عادي): {e}")
+ 

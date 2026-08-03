@@ -9,8 +9,28 @@ from scripts.train import train
 from scripts.evaluate import evaluate_model
 
 from huggingface_hub import login
-login("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")
 
+# ============================================================
+# ✅ على Kaggle: حط الـ token جوا Kaggle Secrets باسم HF_TOKEN
+# بدل ما يكون مكتوب هون مباشرة (خطر أمني لو الـ notebook عام)
+# ============================================================
+try:
+    from kaggle_secrets import UserSecretsClient
+    hf_token = UserSecretsClient().get_secret("HF_TOKEN")
+except Exception:
+    hf_token = "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"  # fallback محلي فقط
+ 
+login(hf_token)
+
+
+# ============================================================
+# ✅ اسم الـ repo على HF Hub لحفظ نسخة احتياطية من الـ checkpoints
+# لازم يكون private repo على حسابك (huggingface.co/new)
+# غيّر "USERNAME/fashion200k-checkpoints" لاسم الـ repo تبعك
+# ============================================================
+HUB_REPO_ID = "USERNAME/fashion200k-checkpoints"
+PUSH_TO_HUB = True  # خليها False لو ما بدك رفع تلقائي
+ 
 
 cfg = yaml.safe_load(open("config.yaml", "r"))
 
@@ -27,10 +47,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = FullModel(processor, blip2, cfg['embed_dim'])
 print(f"model dtype: {model.blip2.dtype}")
 
-# استرجاع آخر checkpoint (لو موجود) 
-# ============================================================
-model, resume_state = restore_checkpoint(model, cfg, device)
-
+# استرجاع آخر checkpoint (محلياً أو من HF Hub لو الجلسة انقطعت)
+model, resume_state = restore_checkpoint(model, cfg, device, hub_repo_id=HUB_REPO_ID)
 
 dataset = FashionDataset(cfg['image_dir'], f"{cfg['data_dir']}/train_triplets.csv")
 valset = FashionDataset(cfg['image_dir'], f"{cfg['data_dir']}/val_triplets.csv")
@@ -53,6 +71,8 @@ criterion = train(
     device=device,
     start_step=cfg['latest_step'],
     resume_state=resume_state,
+    push_to_hub=PUSH_TO_HUB,
+    hub_repo_id=HUB_REPO_ID
 )
 
 print("trained successfull")

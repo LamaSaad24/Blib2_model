@@ -3,7 +3,7 @@ import torch
 from peft import PeftModel
 
 
-def restore_checkpoint(model, cfg, device):
+def restore_checkpoint(model, cfg, device, hub_repo_id=None):
     """
     يسترجع آخر checkpoint محفوظ (لو موجود) حسب cfg['latest_step'].
 
@@ -15,6 +15,10 @@ def restore_checkpoint(model, cfg, device):
     مستخدمة من main.py و main_v2.py وأي سكربت تاني بده يسترجع نفس الطريقة
     (test_search.py مثلاً)، بدل ما نكرر نفس المنطق بكل ملف.
     """
+    """
+    يسترجع آخر checkpoint محفوظ. أول شي يدوّر محلياً، وإذا مش موجود
+    (مثلاً بعد ما انقطعت جلسة Kaggle وبلشت جلسة جديدة) يحاول يسحبه من HF Hub.
+    """
     resume_state = None
     latest_step = cfg['latest_step']
 
@@ -24,6 +28,27 @@ def restore_checkpoint(model, cfg, device):
 
     latest_checkpoint = f"{cfg['model_dir']}/Blip2_model_Checkpoints_small/step_{latest_step}"
     print(f"Restor the model from step: {latest_checkpoint}")
+
+    # ============================================================
+    # ✅ لو المسار المحلي مش موجود (جلسة جديدة بعد انقطاع)، جرب تسحب من HF Hub
+    # ============================================================
+    if not os.path.isdir(latest_checkpoint) and hub_repo_id is not None:
+        print(f"[Restore] المسار المحلي مش موجود، جاري السحب من HF Hub: {hub_repo_id}/step_{latest_step} ...")
+        try:
+            from huggingface_hub import snapshot_download
+            downloaded_path = snapshot_download(
+                repo_id=hub_repo_id,
+                repo_type="model",
+                allow_patterns=[f"step_{latest_step}/*"],
+            )
+            latest_checkpoint = os.path.join(downloaded_path, f"step_{latest_step}")
+            print(f"[Restore] ✅ تم السحب من HF Hub بنجاح: {latest_checkpoint}")
+        except Exception as e:
+            raise FileNotFoundError(
+                f"❌ ما قدرنا نلاقي الـ checkpoint لا محلياً ولا على HF Hub.\n"
+                f"تفاصيل الخطأ: {e}"
+            )
+
 
     if not os.path.isdir(latest_checkpoint):
         raise FileNotFoundError(
