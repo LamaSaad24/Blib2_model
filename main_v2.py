@@ -18,7 +18,7 @@ try:
     from kaggle_secrets import UserSecretsClient
     hf_token = UserSecretsClient().get_secret("HF_TOKEN")
 except Exception:
-    hf_token = "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"  # fallback محلي فقط
+    hf_token = "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"  # fallback محلي فقط
  
 login(hf_token)
 
@@ -28,7 +28,7 @@ login(hf_token)
 # لازم يكون private repo على حسابك (huggingface.co/new)
 # غيّر "USERNAME/fashion200k-checkpoints" لاسم الـ repo تبعك
 # ============================================================
-HUB_REPO_ID = "USERNAME/fashion200k-checkpoints"
+HUB_REPO_ID =  "lama65/train_BLIP2_model"
 PUSH_TO_HUB = True  # خليها False لو ما بدك رفع تلقائي
  
 
