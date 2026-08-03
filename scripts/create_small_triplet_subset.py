@@ -32,6 +32,6 @@ for split, (file_path, sample_size) in files_info.items():
     final_sample = sample_df.head(sample_size)
 
     # حفظ العينة
-    output_file = os.path.join(output_dir, f"{split}.csv")
+    output_file = os.path.join(output_dir, f"{split}_triplets.csv")
     final_sample.to_csv(output_file, index=False)
     print(f"{split} sample saved: {output_file} ({len(final_sample)} rows)")
