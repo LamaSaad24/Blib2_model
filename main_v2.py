@@ -1,3 +1,12 @@
+import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+"""
+بيغيّر طريقة إدارة الذاكرة بحيث 
+PyTorch يقدر يوسّع القطع المحجوزة بدل ما يحجز قطع جديدة منفصلة كل مرة
+— بمعنى تاني، بدل ما يحجزلك سيارات صف صف بمساحات ثابتة، 
+بيخليك توسّع نفس المساحة المحجوزة أصلاً لما تحتاج أكتر، فبيقل التفتّت
+(fragmentation) بشكل كبير.
+"""
 import yaml
 import torch
 from torch.utils.data import DataLoader
