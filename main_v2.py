@@ -18,7 +18,7 @@ try:
     from kaggle_secrets import UserSecretsClient
     hf_token = UserSecretsClient().get_secret("HF_TOKEN")
 except Exception:
-    hf_token = "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"  # fallback محلي فقط
+    hf_token = "x"  # fallback محلي فقط
  
 login(hf_token)
 
