@@ -42,7 +42,7 @@ def train(
     """
     optimizer = AdamW([
                 {"params": [p for n,p in model.named_parameters() if p.requires_grad and "retrieval_head" not in n], "lr": lr},   # LoRA
-                {"params": model.retrieval_head.parameters(), "lr": lr*10},   # رأس الاسترجاع — LR أعلى بـ10x
+                {"params": model.retrieval_head.parameters(), "lr": lr*5},   # رأس الاسترجاع — LR أعلى بـ10x
             ], weight_decay=weight_decay)
 
     total_steps = epochs * len(trainloader)
