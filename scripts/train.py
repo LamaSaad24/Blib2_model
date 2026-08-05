@@ -25,11 +25,11 @@ def train(
     model = model.to(device,  dtype=torch.bfloat16)
 
     # Optimizer
-    """optimizer = AdamW(
+    optimizer = AdamW(
         filter(lambda p: p.requires_grad, model.parameters()), lr=lr
         , weight_decay=weight_decay
         )"""
-    """
+    
     لازم تفصلي الـ 
     learning rate 
     بين 
@@ -40,10 +40,11 @@ def train(
       لكن retrieval_head
         طبقة جديدة تماماً بأوزان عشوائية (لازم تتعلم من الصفر، فتحتاج خطوات أكبر).
     """
+    """
     optimizer = AdamW([
                 {"params": [p for n,p in model.named_parameters() if p.requires_grad and "retrieval_head" not in n], "lr": lr},   # LoRA
                 {"params": model.retrieval_head.parameters(), "lr": lr*5},   # رأس الاسترجاع — LR أعلى بـ10x
-            ], weight_decay=weight_decay)
+            ], weight_decay=weight_decay)"""
 
     total_steps = epochs * len(trainloader)
     scheduler = get_linear_schedule_with_warmup(
