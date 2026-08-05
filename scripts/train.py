@@ -28,7 +28,7 @@ def train(
     optimizer = AdamW(
         filter(lambda p: p.requires_grad, model.parameters()), lr=lr
         , weight_decay=weight_decay
-        )"""
+        )
     
     لازم تفصلي الـ 
     learning rate 
