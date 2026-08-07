@@ -7,7 +7,7 @@ latest_step: 0
 
 use_gpu: true #true
 epochs: 10 #300
-batch_size: 64  #16
+batch_size: 24  #16
 lr: 0.00001
 embed_dim: 768
 
