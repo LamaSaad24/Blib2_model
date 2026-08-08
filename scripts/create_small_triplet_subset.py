@@ -3,9 +3,9 @@ import os
 
 # مسارات الملفات وحجم العينة
 files_info = {
-    "train": ("data/processed/train_triplets.csv", 100),
-    "val": ("data/processed/val_triplets.csv", 50),
-    "test": ("data/processed/test_triplets.csv", 50)
+    "train": ("data/processed/train_triplets.csv", 40000),
+    "val": ("data/processed/val_triplets.csv", 10000),
+    "test": ("data/processed/test_triplets.csv", 10000)
 }
 
 output_dir = "data/sample/"
