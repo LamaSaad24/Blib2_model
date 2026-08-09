@@ -1,37 +1,71 @@
 import os
+import re
 import torch
 from peft import PeftModel
 
 
-def restore_checkpoint(model, cfg, device, hub_repo_id=None):
-    """
-    يسترجع آخر checkpoint محفوظ (لو موجود) حسب cfg['latest_step'].
+def _find_latest_local_step(base_dir):
+    """يدوّر على أعلى step_N موجود محلياً تحت base_dir، أو None إذا ما في شي."""
+    if not os.path.isdir(base_dir):
+        return None
+    steps = []
+    for name in os.listdir(base_dir):
+        m = re.match(r"^step_(\d+)$", name)
+        if m:
+            steps.append(int(m.group(1)))
+    return max(steps) if steps else None
 
-    بترجع:
-        model         : الموديل بعد ما تركّب عليه أوزان LoRA + retrieval_head
-        resume_state  : dict فيها optimizer/scheduler/logit_scale/xbm_memory
-                        (أو None إذا latest_step == 0 أو الـ checkpoint قديم بدون training_state.pth)
 
-    مستخدمة من main.py و main_v2.py وأي سكربت تاني بده يسترجع نفس الطريقة
-    (test_search.py مثلاً)، بدل ما نكرر نفس المنطق بكل ملف.
+def _find_latest_hub_step(hub_repo_id):
+    """يدوّر على أعلى step_N موجود على HF Hub، أو None إذا ما في شي / فشل الاتصال."""
+    try:
+        from huggingface_hub import list_repo_files
+        files = list_repo_files(hub_repo_id, repo_type="model")
+        steps = set()
+        for f in files:
+            m = re.match(r"^step_(\d+)/", f)
+            if m:
+                steps.add(int(m.group(1)))
+        return max(steps) if steps else None
+    except Exception:
+        return None
+
+
+def restore_checkpoint(model, cfg, device, hub_repo_id=None, auto_detect=True):
     """
-    """
-    يسترجع آخر checkpoint محفوظ. أول شي يدوّر محلياً، وإذا مش موجود
-    (مثلاً بعد ما انقطعت جلسة Kaggle وبلشت جلسة جديدة) يحاول يسحبه من HF Hub.
+    يسترجع آخر checkpoint محفوظ.
+
+    ✅ auto_detect=True (افتراضي): بيكتشف تلقائياً أعلى step محفوظ
+    (محلياً، وإذا مش موجود محلياً بيدوّر على HF Hub) بدل الاعتماد على
+    latest_step المكتوب يدوياً بـ config.yaml.
+
+    بترجع 3 قيم: model, resume_state, detected_step
     """
     resume_state = None
-    latest_step = cfg['latest_step']
+    base_dir = f"{cfg['model_dir']}/Blip2_model_Checkpoints_small"
 
-    if latest_step <= 0:
-        print("latest_step = 0 -> بدء تدريب جديد من الصفر (بدون استرجاع)")
-        return model, resume_state
+    if auto_detect:
+        latest_step = _find_latest_local_step(base_dir)
 
-    latest_checkpoint = f"{cfg['model_dir']}/Blip2_model_Checkpoints_small/step_{latest_step}"
+        if latest_step is not None:
+            print(f"[Auto-Resume] 🔎 لقيت checkpoint محلي أعلى step: {latest_step}")
+        elif hub_repo_id is not None:
+            latest_step = _find_latest_hub_step(hub_repo_id)
+            if latest_step is not None:
+                print(f"[Auto-Resume] 🔎 مافي محلياً، لقيت على HF Hub أعلى step: {latest_step}")
+
+        if latest_step is None:
+            print("[Auto-Resume] مافي أي checkpoint محلي ولا على HF Hub -> بدء تدريب جديد من الصفر")
+            return model, resume_state, 0
+    else:
+        latest_step = cfg['latest_step']
+        if latest_step <= 0:
+            print("latest_step = 0 -> بدء تدريب جديد من الصفر (بدون استرجاع)")
+            return model, resume_state, 0
+
+    latest_checkpoint = os.path.join(base_dir, f"step_{latest_step}")
     print(f"Restor the model from step: {latest_checkpoint}")
 
-    # ============================================================
-    # ✅ لو المسار المحلي مش موجود (جلسة جديدة بعد انقطاع)، جرب تسحب من HF Hub
-    # ============================================================
     if not os.path.isdir(latest_checkpoint) and hub_repo_id is not None:
         print(f"[Restore] المسار المحلي مش موجود، جاري السحب من HF Hub: {hub_repo_id}/step_{latest_step} ...")
         try:
@@ -49,35 +83,26 @@ def restore_checkpoint(model, cfg, device, hub_repo_id=None):
                 f"تفاصيل الخطأ: {e}"
             )
 
-
     if not os.path.isdir(latest_checkpoint):
-        raise FileNotFoundError(
-            f"❌ مافي checkpoint بهاد المسار: {latest_checkpoint}\n"
-            f"تأكد من latest_step بـ config.yaml، أو حط latest_step: 0 لتدريب من الصفر."
-        )
+        raise FileNotFoundError(f"❌ مافي checkpoint بهاد المسار: {latest_checkpoint}")
 
-    # 1. تركيب أوزان LoRA المحفوظة فوق نموذج BLIP-2 الأساسي
     model.blip2.language_model = PeftModel.from_pretrained(
         model.blip2.language_model,
         os.path.join(latest_checkpoint, "lora")
     )
 
-    # 2. استعادة أوزان رأس الاسترجاع (Retrieval Head)
     model.retrieval_head.load_state_dict(
         torch.load(os.path.join(latest_checkpoint, "retrieval_head.pth"), weights_only=True)
     )
 
-    # 3. استعادة حالة التدريب الكاملة (optimizer + scheduler + logit_scale + XBM)
     training_state_path = os.path.join(latest_checkpoint, "training_state.pth")
     if os.path.exists(training_state_path):
         resume_state = torch.load(training_state_path, weights_only=False)
         print("[Resume] ✅ training_state.pth loaded (optimizer/scheduler/logit_scale/xbm)")
     else:
-        print("[Resume] ⚠️ ما في training_state.pth بهاد الـ checkpoint (checkpoint قديم من قبل التحديث) "
-              "-- رح نكمل بس بأوزان الموديل، والـ optimizer/scheduler/temperature رح يبلشوا من جديد.")
+        print("[Resume] ⚠️ ما في training_state.pth بهاد الـ checkpoint -- رح نكمل بس بأوزان الموديل.")
 
-    # 4. نقل النموذج كاملاً إلى كرت الشاشة بالصيغة الصحيحة
     model = model.to(device, dtype=torch.bfloat16)
-
     print("The model was successfully restored")
-    return model, resume_state
+
+    return model, resume_state, latest_step
