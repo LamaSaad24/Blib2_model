@@ -1,12 +1,34 @@
 # @title
 import torch
 import torch.nn as nn
-from transformers import get_linear_schedule_with_warmup
+from transformers import get_linear_schedule_with_warmup, get_cosine_schedule_with_warmup
 from torch.optim import AdamW
 from tqdm import tqdm
 
 from utils import (save_model_checkpoint,EarlyStopping)
 from src import (ComposedRetrievalLoss)
+
+
+def build_scheduler(scheduler_name, optimizer, warmup_steps, total_steps):
+    """
+    ✅ جديد: بتقرأ scheduler_name فعلياً من config.yaml بدل ما تكون
+    القيمة "زينة" غير مستخدمة. بتدعم القيمتين الشائعتين:
+    - "cosine_with_warmup": نزول تدريجي بمنحنى جيبي (أنعم من الخطي، شائع بموديلات كبيرة)
+    - "linear_with_warmup" (أو أي قيمة تانية): نزول خطي (كان الافتراضي الثابت سابقاً)
+    """
+    scheduler_name = (scheduler_name or "linear_with_warmup").lower()
+
+    if scheduler_name == "cosine_with_warmup":
+        print(f"[Scheduler] ✅ استخدام cosine_with_warmup (warmup={warmup_steps}, total={total_steps})")
+        return get_cosine_schedule_with_warmup(
+            optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps
+        )
+    else:
+        print(f"[Scheduler] ✅ استخدام linear_with_warmup (warmup={warmup_steps}, total={total_steps})")
+        return get_linear_schedule_with_warmup(
+            optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps
+        )
+
 
 def train(
     model,
@@ -21,38 +43,24 @@ def train(
     resume_state=None,  # جديد: dict فيها optimizer/scheduler/logit_scale/xbm_memory محفوظين سابقاً
     push_to_hub=False,          
     hub_repo_id=None,
+    scheduler_name="linear_with_warmup",  # ✅ جديد -- ياخدها main_v2.py من cfg['scheduler']
 ):
     model = model.to(device,  dtype=torch.bfloat16)
 
-    # Optimizer
     optimizer = AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()), lr=lr
-        , weight_decay=weight_decay
-        )
-    
-    """ لازم تفصلي الـ 
-    learning rate 
-    بين 
-    LoRA و retrieval_head، 
-    لأنهم بحالة مختلفة تماماً —
-      LoRA
-      بيعدّل أوزان مُدرَّبة مسبقاً (يحتاج خطوات صغيرة)，
-      لكن retrieval_head
-        طبقة جديدة تماماً بأوزان عشوائية (لازم تتعلم من الصفر، فتحتاج خطوات أكبر).
-    """
-    """
-    optimizer = AdamW([
-                {"params": [p for n,p in model.named_parameters() if p.requires_grad and "retrieval_head" not in n], "lr": lr},   # LoRA
-                {"params": model.retrieval_head.parameters(), "lr": lr*5},   # رأس الاسترجاع — LR أعلى بـ10x
-            ], weight_decay=weight_decay)"""
+        filter(lambda p: p.requires_grad, model.parameters()), lr=lr, weight_decay=weight_decay
+    )
 
     total_steps = epochs * len(trainloader)
-    scheduler = get_linear_schedule_with_warmup(
-        optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps
-    )
+
+    # ============================================================
+    # ✅ صار فعلياً يقرأ scheduler_name، مش ثابت على linear دايماً
+    # ============================================================
+    scheduler = build_scheduler(scheduler_name, optimizer, warmup_steps, total_steps)
 
     # Loss Function (L = L_LM + w * L_InfoNCE)
     # use_xbm=True بيفعّل الذاكرة اللي بتزوّد عدد الـ negatives بدون batch أكبر
+    
     criterion = ComposedRetrievalLoss(
         omega=1.0,
         use_xbm=True,
@@ -79,10 +87,6 @@ def train(
             criterion.info_nce.load_state_dict_extra(resume_state["xbm_memory"])
             print("[Resume] ✅ XBM memory restored")
 
-    #early_stopping = EarlyStopping(patience=3)
-    #torch.autograd.set_detect_anomaly(True) # Added for debugging NaNs
-
-    #save checkpoint settings
     global_step = start_step
     save_every_n_steps = 250  # نحفظ كل 250 خطوة
 
@@ -148,9 +152,9 @@ def train(
             epoch_contrastive_loss += contrastive_loss.item()
 
             pbar.set_postfix({
-                "total loss": f"{loss.item():.4f}",
-                "lm loss": f"{lm_loss.item():.4f}",
-                "contrastive loss (InfoNCE)": f"{contrastive_loss.item():.4f}"
+                "total loss": f"{loss.item():.2f}",
+                "lm loss": f"{lm_loss.item():.2f}",
+                "contrastive loss (InfoNCE)": f"{contrastive_loss.item():.2f}"
             })
 
         print("starting validation......")

@@ -65,13 +65,17 @@ criterion = train(
     start_step=detected_step,   # ✅ مكتشف تلقائياً، مش من config.yaml
     resume_state=resume_state,
     push_to_hub=PUSH_TO_HUB,
-    hub_repo_id=HUB_REPO_ID
+    hub_repo_id=HUB_REPO_ID,
+    scheduler_name=cfg.get('scheduler', 'linear_with_warmup'),
 )
 
 print("trained successfull")
 
 save_final_model(model, criterion=criterion, save_dir="outputs/Final_Fashion_Model")
 
-r1, r10, r50, r_avg = evaluate_model(model, valloader, device="cuda")
+r1, r10, r50, r_avg = evaluate_model(model, valloader,
+                                      device="cuda",
+                                        recall_ks=tuple(cfg.get('recall_ks', [1, 10, 50]))
+                                     )
 
 print("evaluate successfull")
