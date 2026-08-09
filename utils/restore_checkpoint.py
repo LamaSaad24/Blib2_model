@@ -1,11 +1,11 @@
 import os
 import re
 import torch
-from peft import PeftModel
+from peft import set_peft_model_state_dict
+from safetensors.torch import load_file
 
 
 def _find_latest_local_step(base_dir):
-    """يدوّر على أعلى step_N موجود محلياً تحت base_dir، أو None إذا ما في شي."""
     if not os.path.isdir(base_dir):
         return None
     steps = []
@@ -17,7 +17,6 @@ def _find_latest_local_step(base_dir):
 
 
 def _find_latest_hub_step(hub_repo_id):
-    """يدوّر على أعلى step_N موجود على HF Hub، أو None إذا ما في شي / فشل الاتصال."""
     try:
         from huggingface_hub import list_repo_files
         files = list_repo_files(hub_repo_id, repo_type="model")
@@ -33,20 +32,21 @@ def _find_latest_hub_step(hub_repo_id):
 
 def restore_checkpoint(model, cfg, device, hub_repo_id=None, auto_detect=True):
     """
-    يسترجع آخر checkpoint محفوظ.
+    ✅ إصلاح جوهري: model.blip2.language_model هو أصلاً PeftModel
+    (تم تطبيق get_peft_model عليه بـ FullModel.__init__). لو استخدمنا
+    PeftModel.from_pretrained(model.blip2.language_model, path) هون،
+    هاد بيغلّف الموديل بـ LoRA جديدة فوق LoRA الموجودة أصلاً (LoRA داخل LoRA)!
+    النتيجة: أوزان LoRA المدرّبة فعلياً ما بتنحمّل أبداً (mismatch بأسماء
+    المفاتيح)، والموديل يستمر بأوزان LoRA عشوائية بصمت.
 
-    ✅ auto_detect=True (افتراضي): بيكتشف تلقائياً أعلى step محفوظ
-    (محلياً، وإذا مش موجود محلياً بيدوّر على HF Hub) بدل الاعتماد على
-    latest_step المكتوب يدوياً بـ config.yaml.
-
-    بترجع 3 قيم: model, resume_state, detected_step
+    الحل الصح: نحمّل أوزان LoRA مباشرة *داخل* بنية الـ PeftModel الموجودة
+    أصلاً، باستخدام set_peft_model_state_dict (بدل from_pretrained).
     """
     resume_state = None
     base_dir = f"{cfg['model_dir']}/Blip2_model_Checkpoints_small"
 
     if auto_detect:
         latest_step = _find_latest_local_step(base_dir)
-
         if latest_step is not None:
             print(f"[Auto-Resume] 🔎 لقيت checkpoint محلي أعلى step: {latest_step}")
         elif hub_repo_id is not None:
@@ -86,10 +86,19 @@ def restore_checkpoint(model, cfg, device, hub_repo_id=None, auto_detect=True):
     if not os.path.isdir(latest_checkpoint):
         raise FileNotFoundError(f"❌ مافي checkpoint بهاد المسار: {latest_checkpoint}")
 
-    model.blip2.language_model = PeftModel.from_pretrained(
-        model.blip2.language_model,
-        os.path.join(latest_checkpoint, "lora")
-    )
+    # ============================================================
+    # ✅ الجزء المصحح: تحميل أوزان LoRA *داخل* الـ PeftModel الموجود
+    # بدل ما نغلّفه بـ LoRA جديدة فوق القديمة
+    # ============================================================
+    lora_path = os.path.join(latest_checkpoint, "lora")
+    adapter_weights_path = os.path.join(lora_path, "adapter_model.safetensors")
+
+    if not os.path.exists(adapter_weights_path):
+        raise FileNotFoundError(f"❌ مافي adapter_model.safetensors بـ {lora_path}")
+
+    adapter_state_dict = load_file(adapter_weights_path)
+    set_peft_model_state_dict(model.blip2.language_model, adapter_state_dict)
+    print(f"[Restore] ✅ أوزان LoRA تحمّلت صح داخل الموديل (بدون تكرار/تغليف)")
 
     model.retrieval_head.load_state_dict(
         torch.load(os.path.join(latest_checkpoint, "retrieval_head.pth"), weights_only=True)
