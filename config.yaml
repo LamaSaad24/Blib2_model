@@ -1,13 +1,14 @@
 data_dir: data/sample
-image_dir: data/raw/images
 
-model_dir: outputs/saved_models
+image_dir: /kaggle/input/datasets/mayukh18/fashion200k-dataset/
+
+model_dir: /kaggle/working/saved_models
 
 latest_step: 0
 
-use_gpu: true #true
-epochs: 10 #300
-batch_size: 24  #16
+use_gpu: true
+epochs: 3 
+batch_size: 16
 lr: 0.00001
 embed_dim: 768
 
@@ -19,6 +20,6 @@ lora_dropout: 0.1
 
 scheduler: cosine_with_warmup
 weight_decay: 0.01
-warmup_steps: 50
+warmup_steps: 100
 
 recall_ks: [1, 10, 50]
