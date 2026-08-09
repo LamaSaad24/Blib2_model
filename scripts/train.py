@@ -50,6 +50,8 @@ def train(
     optimizer = AdamW(
         filter(lambda p: p.requires_grad, model.parameters()), lr=lr, weight_decay=weight_decay
     )
+    
+    
 
     total_steps = epochs * len(trainloader)
 
@@ -73,10 +75,39 @@ def train(
     # ============================================================
     # استئناف حالة التدريب (optimizer + scheduler + logit_scale + XBM)
     # ============================================================
+    # if resume_state is not None:
+    #     if "optimizer" in resume_state:
+    #         optimizer.load_state_dict(resume_state["optimizer"])
+    #         print("[Resume] ✅ optimizer state restored")
+        # ============================================================
+    # استئناف حالة التدريب (optimizer + scheduler + logit_scale + XBM)
+    # ============================================================
     if resume_state is not None:
         if "optimizer" in resume_state:
-            optimizer.load_state_dict(resume_state["optimizer"])
-            print("[Resume] ✅ optimizer state restored")
+            try:
+                optimizer.load_state_dict(resume_state["optimizer"])
+                print("[Resume] ✅ optimizer state restored")
+            except ValueError:
+                print("[Resume] ⚠️ تم اكتشاف عدم تطابق في الحجم! جاري ترقيع الحالات للأوزان النشطة فقط...")
+                saved_opt = resume_state["optimizer"]
+                current_opt_state = optimizer.state_dict()
+                
+                # ربط المتغيرات النشطة الحالية بما يقابلها في الملف المحفوظ
+                # الـ optimizer الحالي يحتوي على الأوزان النشطة فقط، سنأخذ قيم الـ momentum لها من الملف القديم
+                saved_state_dict = saved_opt.get("state", {})
+                current_state_dict = current_opt_state.get("state", {})
+                
+                matched_count = 0
+                for p_id in current_opt_state["param_groups"][0]["params"]:
+                    if p_id in saved_state_dict:
+                        current_state_dict[p_id] = saved_state_dict[p_id]
+                        matched_count += 1
+                
+                # تحديث الـ state الكلي وإعادة تحميله
+                current_opt_state["state"] = current_state_dict
+                optimizer.load_state_dict(current_opt_state)
+                print(f"[Resume] ✅ تم استرجاع حالة {matched_count} وزن نشط بنجاح وتخطي الأوزان المجمدة!")
+
         if "scheduler" in resume_state:
             scheduler.load_state_dict(resume_state["scheduler"])
             print("[Resume] ✅ scheduler state restored")
