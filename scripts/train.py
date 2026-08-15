@@ -39,36 +39,25 @@ def train(
     weight_decay,
     warmup_steps,
     device,
-    start_step=0, # قيمة افتراضيه
-    resume_state=None,  # جديد: dict فيها optimizer/scheduler/logit_scale/xbm_memory محفوظين سابقاً
-    push_to_hub=False,          
+    start_step=0,
+    resume_state=None,
+    push_to_hub=False,
     hub_repo_id=None,
-    scheduler_name="linear_with_warmup",  # ✅ جديد -- ياخدها main_v2.py من cfg['scheduler']
+    scheduler_name="linear_with_warmup",
 ):
     model = model.to(device,  dtype=torch.bfloat16)
 
     optimizer = AdamW(
         filter(lambda p: p.requires_grad, model.parameters()), lr=lr, weight_decay=weight_decay
     )
-    
-    
 
-    total_steps = epochs * len(trainloader)
+    steps_per_epoch = len(trainloader)
+    total_steps = epochs * steps_per_epoch
 
-    # ============================================================
-    # ✅ صار فعلياً يقرأ scheduler_name، مش ثابت على linear دايماً
-    # ============================================================
     scheduler = build_scheduler(scheduler_name, optimizer, warmup_steps, total_steps)
 
-    # Loss Function (L = L_LM + w * L_InfoNCE)
-    # use_xbm=True بيفعّل الذاكرة اللي بتزوّد عدد الـ negatives بدون batch أكبر
-    
     criterion = ComposedRetrievalLoss(
-        omega=1.0,
-        use_xbm=True,
-        xbm_capacity=65536,   # زي الورقة بالضبط (memory.py تبعك)
-        embed_dim=768,        # لازم يطابق embed_dim بالـ config.yaml
-        device=device,
+        omega=1.0, use_xbm=True, xbm_capacity=65536, embed_dim=768, device=device,
     )
     criterion = criterion.to(device)
 
@@ -89,75 +78,88 @@ def train(
             criterion.info_nce.load_state_dict_extra(resume_state["xbm_memory"])
             print("[Resume] ✅ XBM memory restored")
 
+    # ============================================================
+    # ✅ إصلاح جوهري: حساب صحيح لـ "أي epoch" و"أي batch داخلها"
+    # بدل الاعتماد على شرط epoch==0 (كان يفشل لو start_step > حجم epoch وحدة)
+    # ============================================================
+    start_epoch = start_step // steps_per_epoch
+    start_batch_in_epoch = start_step % steps_per_epoch
+
+    if start_step > 0:
+        print(f"[Resume] 📍 هيبلش من epoch {start_epoch + 1}, batch {start_batch_in_epoch} داخلها "
+              f"(global_step={start_step})")
+
     global_step = start_step
-    save_every_n_steps = 250  # نحفظ كل 250 خطوة
+    save_every_n_steps = 250
 
+    for epoch in range(start_epoch, epochs):
+        # ✅ لو هاي أول epoch نبلش فيها (ممكن تكون فيها تخطي جزئي)، وإلا كاملة عادية
+        skip_until = start_batch_in_epoch if epoch == start_epoch else 0
 
-    for epoch in range(epochs):
         model.train()
         epoch_lm_loss = 0
         epoch_contrastive_loss = 0
         epoch_total_loss = 0
+        counted_batches = 0  # ✅ لعد الـ batches الفعلية (بدون المتخطاة) لحساب المتوسط صح
         pbar = tqdm(trainloader, desc=f"Epoch {epoch+1}/{epochs}")
 
         for batch_idx, batch in enumerate(pbar):
-            # نتخطى الدفعات التي تدربنا عليها سابقاً (فقط في الجولة الأولى من الاستئناف)
-            if epoch == 0 and batch_idx < start_step:
+            if batch_idx < skip_until:
                 continue
 
             image_ref = batch["ref_images"]
             image_target = batch["trg_images"]
-            text = batch["mod_texts"]        # text queries
-            target_text = batch["trg_captions"]  # target descriptions
+            text = batch["mod_texts"]
+            target_text = batch["trg_captions"]
 
-            optimizer.zero_grad(set_to_none=True)# before forward
+            optimizer.zero_grad(set_to_none=True)
 
             outputs = model(
                 image_ref=image_ref,
                 image_target=image_target,
                 modification_text=text,
-                target_captions=target_text # لتوليد Text Loss
+                target_captions=target_text
             )
 
             query_emb = outputs["query_embedding"]
             target_emb = outputs["target_embedding"]
             lm_loss_from_model = outputs["language_model_loss"]
 
-            # حساب الخسارة الكلية باستخدام ComposedRetrievalLoss
             loss, contrastive_loss, lm_loss = criterion(
-                query_emb,
-                target_emb,
-                lm_loss_from_model
+                query_emb, target_emb, lm_loss_from_model
             )
 
             loss.backward()
             optimizer.step()
             scheduler.step()
 
-            # save checkpoint
-            global_step += 1 # زيادة العداد بمقدار 1 مع كل دفعة (Batch)
+            global_step += 1
+            counted_batches += 1
 
-            # ✅ الآن منمرر optimizer/scheduler/criterion عشان يتحفظوا كمان
             if global_step % save_every_n_steps == 0:
                 save_model_checkpoint(
                     model, global_step,
-                    optimizer=optimizer,
-                    scheduler=scheduler,
-                    criterion=criterion,
-                    push_to_hub=push_to_hub,
-                    hub_repo_id=hub_repo_id
+                    optimizer=optimizer, scheduler=scheduler, criterion=criterion,
+                    push_to_hub=push_to_hub, hub_repo_id=hub_repo_id
                 )
 
-            # Logging
             epoch_total_loss += loss.item()
             epoch_lm_loss += lm_loss.item()
             epoch_contrastive_loss += contrastive_loss.item()
 
             pbar.set_postfix({
-                "total loss": f"{loss.item():.2f}",
-                "lm loss": f"{lm_loss.item():.2f}",
-                "contrastive loss (InfoNCE)": f"{contrastive_loss.item():.2f}"
+                "loss": f"{loss.item():.2f}",
+                "lm": f"{lm_loss.item():.2f}",
+                "nce": f"{contrastive_loss.item():.2f}"
             })
+
+        # ============================================================
+        # ✅ لو هاي الـ epoch كانت متخطاة بالكامل (مافي أي batch فعلي اتدرب)،
+        # منتخطى الـ validation كمان -- ما في داعي نعيد تقييم موديل ما تغيّر
+        # ============================================================
+        if counted_batches == 0:
+            print(f"[Epoch {epoch+1}] كانت متخطاة بالكامل (استئناف) -- تخطينا الـ validation كمان.")
+            continue
 
         print("starting validation......")
         # ---------------------------
@@ -188,9 +190,7 @@ def train(
                 lm_loss_from_model = outputs["language_model_loss"]
 
                 loss, contrastive_loss, lm_loss = criterion(
-                    query_emb,
-                    target_emb,
-                    lm_loss_from_model
+                    query_emb, target_emb, lm_loss_from_model
                 )
 
                 val_total_loss += loss.item()
@@ -198,8 +198,8 @@ def train(
                 val_contrastive_loss += contrastive_loss.item()
 
                 val_pbar.set_postfix({
-                    "val_loss"  : f"{loss.item():.4f}",
-                    "val_lm"    : f"{lm_loss.item():.4f}",
+                    "val_loss": f"{loss.item():.4f}",
+                    "val_lm": f"{lm_loss.item():.4f}",
                     "val_InfoNCE": f"{contrastive_loss.item():.4f}"
                 })
 
@@ -208,14 +208,12 @@ def train(
         val_contrastive_loss /= len(valloader)
 
         print(f"\n[Validation] Total Loss: {val_total_loss:.4f} | LM Loss: {val_lm_loss:.4f} | InfoNCE: {val_contrastive_loss:.4f}")
-
         print(
-                f"[Epoch {epoch+1}] "
-                f"Train Total: {epoch_total_loss/len(trainloader):.4f} | "
-                f"LM: {epoch_lm_loss/len(trainloader):.4f} | "
-                f"InfoNCE: {epoch_contrastive_loss/len(trainloader):.4f}"
-            )
+            f"[Epoch {epoch+1}] "
+            f"Train Total: {epoch_total_loss/counted_batches:.4f} | "
+            f"LM: {epoch_lm_loss/counted_batches:.4f} | "
+            f"InfoNCE: {epoch_contrastive_loss/counted_batches:.4f}"
+        )
     print("ending of train")
 
-    # نرجع criterion عشان main.py يقدر يحفظ logit_scale النهائي بالـ save_final_model
     return criterion
