@@ -18,7 +18,7 @@ except Exception:
 
 login(hf_token)
 
-HUB_REPO_ID = "lama65/train_BLIP2_model"
+HUB_REPO_ID = "lama65/train_BLIP2_model_2_activate_XBM_gradually"
 PUSH_TO_HUB = True
 
 cfg = yaml.safe_load(open("config.yaml", "r"))
