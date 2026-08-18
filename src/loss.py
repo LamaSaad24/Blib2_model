@@ -13,13 +13,16 @@ class InfoNCELoss(nn.Module):
     لزيادة عدد الـ negatives بدون الحاجة لـ batch size كبير.
     """
     def __init__(self, init_temperature=0.07, use_xbm=False,
-                 xbm_capacity=65536, embed_dim=768, device="cuda"):
+                 xbm_capacity=65536, embed_dim=768, device="cuda", xbm_warmup_steps=500):
         super().__init__()
         # Learnable scaling parameter (tau) as mentioned in the paper
         self.logit_scale = nn.Parameter(torch.log(torch.tensor(1.0 / init_temperature)))
 
         # ---- XBM setup ----
         self.use_xbm = use_xbm
+        self.xbm_warmup_steps = xbm_warmup_steps  # ✅ جديد
+        self._step_count = 0  # ✅ جديد -- عداد داخلي لمعرفة هل خلصنا الإحماء
+        
         if self.use_xbm:
             self.memory_target = CrossBatchMemory(embedding_dim=embed_dim, capacity=xbm_capacity, device=device)
             self.memory_query = CrossBatchMemory(embedding_dim=embed_dim, capacity=xbm_capacity, device=device)
@@ -37,22 +40,31 @@ class InfoNCELoss(nn.Module):
 
         # 1) التشابه ضمن الـ batch الحالي
         logits_curr = torch.matmul(emb_a, emb_b.t()) * scale  # (B, B)
+        
+        
+        # ============================================================
+        # ✅ فترة إحماء: نتجاهل الذاكرة تماماً أول xbm_warmup_steps خطوة
+        # (الموديل لسا "ما استقر" ببداية التدريب، فالمقارنة مع ذاكرة
+        # مليئة بـ embeddings عشوائية بتعطّل التعلّم بدل ما تساعده)
+        # ============================================================
+        xbm_active = self.use_xbm and self.training and (self._step_count >= self.xbm_warmup_steps)
+
 
         # 2) التشابه مع الذاكرة (XBM) -- negatives إضافية فقط
-        if self.use_xbm:
+        if xbm_active:
             mem_target = self.memory_target.get()
             mem_query = self.memory_query.get()
         else:
             mem_target = None
             mem_query = None
-
+ 
         if mem_target is not None and mem_target.size(0) > 0:
             mem_target = mem_target.to(emb_a.device, emb_a.dtype)
             logits_mem_a = torch.matmul(emb_a, mem_target.t()) * scale
             full_logits_a = torch.cat([logits_curr, logits_mem_a], dim=1)
         else:
             full_logits_a = logits_curr
-
+ 
         logits_curr_t = logits_curr.t()
         if mem_query is not None and mem_query.size(0) > 0:
             mem_query = mem_query.to(emb_a.device, emb_a.dtype)
@@ -60,12 +72,16 @@ class InfoNCELoss(nn.Module):
             full_logits_b = torch.cat([logits_curr_t, logits_mem_b], dim=1)
         else:
             full_logits_b = logits_curr_t
-
+ 
         targets = torch.arange(batch_size).to(emb_a.device)
-
+ 
         loss_a = F.cross_entropy(full_logits_a, targets)
         loss_b = F.cross_entropy(full_logits_b, targets)
         loss = (loss_a + loss_b) / 2
+ 
+        # ✅ الذاكرة نفسها منضيفلها embeddings من أول خطوة (حتى "تمتلئ"
+        # وتكون جاهزة لما الإحماء يخلص) -- بس ما منستخدمها بالحساب إلا بعد الإحماء
+        
 
         # 3) تحديث الذاكرة -- فقط أثناء التدريب
         if self.use_xbm and self.training:
@@ -84,6 +100,7 @@ class InfoNCELoss(nn.Module):
             extra["memory_query"] = self.memory_query.memory
             extra["memory_query_ptr"] = self.memory_query.ptr
             extra["memory_query_size"] = self.memory_query.size
+            extra["step_count"] = self._step_count  # ✅ جديد -- نحفظ التقدّم بالإحماء كمان
         return extra
 
     def load_state_dict_extra(self, extra):
@@ -94,6 +111,8 @@ class InfoNCELoss(nn.Module):
             self.memory_query.memory = extra["memory_query"]
             self.memory_query.ptr = extra["memory_query_ptr"]
             self.memory_query.size = extra["memory_query_size"]
+            self._step_count = extra.get("step_count", self.xbm_warmup_steps)  # ✅
+ 
 
 
 class ComposedRetrievalLoss(nn.Module):
@@ -102,7 +121,7 @@ class ComposedRetrievalLoss(nn.Module):
     Equation 5: L = L_LM + ω * L_InfoNCE
     """
     def __init__(self, omega=1.0, init_temperature=0.07,
-                 use_xbm=True, xbm_capacity=65536, embed_dim=768, device="cuda"):
+                 use_xbm=True, xbm_capacity=65536, embed_dim=768, device="cuda",xbm_warmup_steps=500):
         super().__init__()
         self.omega = omega
         self.info_nce = InfoNCELoss(
@@ -111,6 +130,7 @@ class ComposedRetrievalLoss(nn.Module):
             xbm_capacity=xbm_capacity,
             embed_dim=embed_dim,
             device=device,
+            xbm_warmup_steps=xbm_warmup_steps,
         )
 
     def forward(self, query_embedding, target_embedding, lm_loss):

@@ -47,9 +47,11 @@ def train(
 ):
     model = model.to(device,  dtype=torch.bfloat16)
 
-    optimizer = AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()), lr=lr, weight_decay=weight_decay
-    )
+    optimizer = AdamW([
+                    {"params": [p for n, p in model.named_parameters()
+                                if p.requires_grad and "retrieval_head" not in n], "lr": lr},
+                    {"params": model.retrieval_head.parameters(), "lr": lr * 5},
+                ], weight_decay=weight_decay)
 
     steps_per_epoch = len(trainloader)
     total_steps = epochs * steps_per_epoch
@@ -57,8 +59,9 @@ def train(
     scheduler = build_scheduler(scheduler_name, optimizer, warmup_steps, total_steps)
 
     criterion = ComposedRetrievalLoss(
-        omega=1.0, use_xbm=True, xbm_capacity=65536, embed_dim=768, device=device,
-    )
+                    omega=1.0, use_xbm=True, xbm_capacity=4096, embed_dim=768, device=device,
+                    xbm_warmup_steps=1000,
+                )
     criterion = criterion.to(device)
 
     # ============================================================
