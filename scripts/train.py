@@ -80,6 +80,10 @@ def train(
         if "xbm_memory" in resume_state:
             criterion.info_nce.load_state_dict_extra(resume_state["xbm_memory"])
             print("[Resume] ✅ XBM memory restored")
+            print(f"[DEBUG] xbm_warmup_steps = {criterion.info_nce.xbm_warmup_steps}")
+            print(f"[DEBUG] _step_count (بعد الاسترجاع) = {criterion.info_nce._step_count}")
+            print(f"[DEBUG] mem_target size = {criterion.info_nce.memory_target.size}")
+            print(f"[DEBUG] logit_scale (بعد exp) = {criterion.info_nce.logit_scale.exp().item():.4f}")
 
     # ============================================================
     # ✅ إصلاح جوهري: حساب صحيح لـ "أي epoch" و"أي batch داخلها"
