@@ -68,6 +68,9 @@ def train(
     # استئناف حالة التدريب (optimizer + scheduler + logit_scale + XBM)
     # ============================================================
     if resume_state is not None:
+        if start_step > 0:
+    criterion.info_nce._step_count = start_step
+    print(f"[Fix] ✅ _step_count = {start_step}")
         if "optimizer" in resume_state:
             optimizer.load_state_dict(resume_state["optimizer"])
             print("[Resume] ✅ optimizer state restored")
