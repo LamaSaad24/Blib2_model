@@ -5,11 +5,19 @@ import torch.nn.functional as F
 
 class RetrievalHead(nn.Module):
     def __init__(self, hidden_size, embed_dim=768):
+        # hidden state -> embedding بحجم معين جاهز للبحث 
         """hidden_size: input hidden size (H), embed_dim: output embedding size (default 768)"""
         super().__init__()
+        # طبقة الأولى طبقة تطبيع تعيد توزيع الحالات الخفية لتصير ضمن نطاق متقارب
         self.norm = nn.LayerNorm(hidden_size)
+        # طبقة ثانية  مجموعة طبقات
+        #multilayer perceptron
         self.mlp = nn.Sequential(
+            # طبقة خطية
             nn.Linear(hidden_size, 1024),
+            # طبقة تحول القيم السالبة ل 0 والموجبة تتركها 
+            # طبقة الإسقاط التفعيل اللاخطي ليتعلم النموذج علاقات أعقد 
+            # Rectified Linear Unit معدل أو مصحح للقيم السالبة 
             nn.ReLU(),
             nn.Linear(1024, embed_dim)
         )
