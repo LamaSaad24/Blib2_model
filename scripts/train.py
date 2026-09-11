@@ -1,12 +1,64 @@
 # @title
+import os
+import csv
+from datetime import datetime
 import torch
 import torch.nn as nn
 from transformers import get_linear_schedule_with_warmup, get_cosine_schedule_with_warmup
 from torch.optim import AdamW
 from tqdm import tqdm
 
-from utils import (save_model_checkpoint,EarlyStopping)
+from utils import (save_model_checkpoint, EarlyStopping)
 from src import (ComposedRetrievalLoss)
+
+LOG_CSV_PATH = "outputs/training_log.csv"
+LOG_CSV_COLUMNS = [
+    "timestamp", "global_step", "epoch_label",
+    "val_total_loss", "val_lm_loss", "val_infonce",
+    "train_total_loss", "train_lm_loss", "train_infonce",
+]
+
+
+def _download_existing_log(hub_repo_id):
+    """✅ جديد: لو فيه سجل قديم على HF Hub، نحمّله أول شي عشان نكمل عليه (مش نبدأ من الصفر)."""
+    if hub_repo_id is None:
+        return
+    try:
+        from huggingface_hub import hf_hub_download
+        downloaded = hf_hub_download(repo_id=hub_repo_id, filename="training_log.csv", repo_type="model")
+        os.makedirs(os.path.dirname(LOG_CSV_PATH), exist_ok=True)
+        import shutil
+        shutil.copy(downloaded, LOG_CSV_PATH)
+        print(f"[Log] ✅ استرجعنا سجل نتائج سابق من HF Hub ({sum(1 for _ in open(LOG_CSV_PATH)) - 1} صف)")
+    except Exception:
+        print("[Log] مافي سجل سابق على HF Hub -- رح نبدأ سجل جديد")
+
+
+def _append_log_row(row_dict, hub_repo_id, push_to_hub):
+    """✅ جديد: يضيف صف جديد لملف CSV محلي، وبيرفعه لـ HF Hub (نسخة دائمة عبر الجلسات)."""
+    os.makedirs(os.path.dirname(LOG_CSV_PATH), exist_ok=True)
+    file_exists = os.path.exists(LOG_CSV_PATH)
+
+    with open(LOG_CSV_PATH, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=LOG_CSV_COLUMNS)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(row_dict)
+
+    print(f"[Log] ✅ نتيجة اتسجلت بـ {LOG_CSV_PATH}")
+
+    if push_to_hub and hub_repo_id is not None:
+        try:
+            from huggingface_hub import upload_file
+            upload_file(
+                path_or_fileobj=LOG_CSV_PATH,
+                path_in_repo="training_log.csv",
+                repo_id=hub_repo_id,
+                repo_type="model",
+            )
+            print(f"[Log] ☁️ السجل اترفع لـ HF Hub: {hub_repo_id}/training_log.csv")
+        except Exception as e:
+            print(f"[Log] ⚠️ فشل رفع السجل (رح يضل محفوظ محلياً بس): {e}")
 
 
 def build_scheduler(scheduler_name, optimizer, warmup_steps, total_steps):
@@ -30,6 +82,40 @@ def build_scheduler(scheduler_name, optimizer, warmup_steps, total_steps):
         )
 
 
+def _run_validation(model, valloader, criterion, desc="Validating"):
+    """دالة مشتركة للـ validation (نستخدمها بالحلقة العادية وبحالة الاسترجاع)."""
+    model.eval()
+    val_total_loss = 0
+    val_lm_loss = 0
+    val_contrastive_loss = 0
+
+    with torch.no_grad():
+        val_pbar = tqdm(valloader, desc=desc)
+        for batch in val_pbar:
+            outputs = model(
+                image_ref=batch["ref_images"],
+                image_target=batch["trg_images"],
+                modification_text=batch["mod_texts"],
+                target_captions=batch["trg_captions"]
+            )
+            loss, contrastive_loss, lm_loss = criterion(
+                outputs["query_embedding"], outputs["target_embedding"],
+                outputs["language_model_loss"]
+            )
+            val_total_loss += loss.item()
+            val_lm_loss += lm_loss.item()
+            val_contrastive_loss += contrastive_loss.item()
+            val_pbar.set_postfix({
+                "val_loss": f"{loss.item():.4f}",
+                "val_lm": f"{lm_loss.item():.4f}",
+                "val_InfoNCE": f"{contrastive_loss.item():.4f}"
+            })
+
+    n = len(valloader)
+    model.train()
+    return val_total_loss / n, val_lm_loss / n, val_contrastive_loss / n
+
+
 def train(
     model,
     trainloader,
@@ -45,13 +131,16 @@ def train(
     hub_repo_id=None,
     scheduler_name="linear_with_warmup",
 ):
-    model = model.to(device,  dtype=torch.bfloat16)
+    model = model.to(device, dtype=torch.bfloat16)
+
+    # ✅ جديد: نحمّل سجل النتائج القديم (لو موجود) قبل ما نبلش
+    _download_existing_log(hub_repo_id)
 
     optimizer = AdamW([
-                    {"params": [p for n, p in model.named_parameters()
-                                if p.requires_grad and "retrieval_head" not in n], "lr": lr},
-                    {"params": model.retrieval_head.parameters(), "lr": lr * 5},
-                ], weight_decay=weight_decay)
+        {"params": [p for n, p in model.named_parameters()
+                     if p.requires_grad and "retrieval_head" not in n], "lr": lr},
+        {"params": model.retrieval_head.parameters(), "lr": lr * 5},
+    ], weight_decay=weight_decay)
 
     steps_per_epoch = len(trainloader)
     total_steps = epochs * steps_per_epoch
@@ -59,9 +148,9 @@ def train(
     scheduler = build_scheduler(scheduler_name, optimizer, warmup_steps, total_steps)
 
     criterion = ComposedRetrievalLoss(
-                    omega=1.0, use_xbm=True, xbm_capacity=4096, embed_dim=768, device=device,
-                    xbm_warmup_steps=1000,
-                )
+        omega=1.0, use_xbm=True, xbm_capacity=4096, embed_dim=768, device=device,
+        xbm_warmup_steps=1000,
+    )
     criterion = criterion.to(device)
 
     # ============================================================
@@ -87,17 +176,36 @@ def train(
 
     if start_step > 0:
         criterion.info_nce._step_count = start_step
-        print(f"[Fix] ✅ _step_count = {start_step}")
-    # ============================================================
-    # ✅ إصلاح جوهري: حساب صحيح لـ "أي epoch" و"أي batch داخلها"
-    # بدل الاعتماد على شرط epoch==0 (كان يفشل لو start_step > حجم epoch وحدة)
-    # ============================================================
+        print(f"[Fix] ✅ _step_count = {start_step} (مزامنة مع start_step)")
+
     start_epoch = start_step // steps_per_epoch
     start_batch_in_epoch = start_step % steps_per_epoch
 
     if start_step > 0:
         print(f"[Resume] 📍 هيبلش من epoch {start_epoch + 1}, batch {start_batch_in_epoch} داخلها "
               f"(global_step={start_step})")
+
+    # ✅ استرجاع validation ضائعة (لو الاستئناف صار بالضبط عند حد epoch)
+    if start_step > 0 and start_batch_in_epoch == 0:
+        missed_epoch_num = start_epoch
+        print(f"[Recovery] ⚠️ يبدو إنه validation تبع Epoch {missed_epoch_num} ضاعت -- عم نعملها هلق...")
+
+        v_total, v_lm, v_nce = _run_validation(
+            model, valloader, criterion, desc=f"Validating (recovered Epoch {missed_epoch_num})"
+        )
+        print(f"\n[Validation - Recovered Epoch {missed_epoch_num}] "
+              f"Total Loss: {v_total:.4f} | LM Loss: {v_lm:.4f} | InfoNCE: {v_nce:.4f}")
+
+        # ✅ تسجيل بالملف
+        _append_log_row({
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "global_step": start_step,
+            "epoch_label": f"Epoch {missed_epoch_num} (recovered)",
+            "val_total_loss": f"{v_total:.4f}",
+            "val_lm_loss": f"{v_lm:.4f}",
+            "val_infonce": f"{v_nce:.4f}",
+            "train_total_loss": "", "train_lm_loss": "", "train_infonce": "",
+        }, hub_repo_id, push_to_hub)
 
     global_step = start_step
     save_every_n_steps = 250
@@ -110,33 +218,25 @@ def train(
         epoch_lm_loss = 0
         epoch_contrastive_loss = 0
         epoch_total_loss = 0
-        counted_batches = 0  # ✅ لعد الـ batches الفعلية (بدون المتخطاة) لحساب المتوسط صح
+        counted_batches = 0
         pbar = tqdm(trainloader, desc=f"Epoch {epoch+1}/{epochs}")
 
         for batch_idx, batch in enumerate(pbar):
             if batch_idx < skip_until:
                 continue
 
-            image_ref = batch["ref_images"]
-            image_target = batch["trg_images"]
-            text = batch["mod_texts"]
-            target_text = batch["trg_captions"]
-
             optimizer.zero_grad(set_to_none=True)
 
             outputs = model(
-                image_ref=image_ref,
-                image_target=image_target,
-                modification_text=text,
-                target_captions=target_text
+                image_ref=batch["ref_images"],
+                image_target=batch["trg_images"],
+                modification_text=batch["mod_texts"],
+                target_captions=batch["trg_captions"]
             )
 
-            query_emb = outputs["query_embedding"]
-            target_emb = outputs["target_embedding"]
-            lm_loss_from_model = outputs["language_model_loss"]
-
             loss, contrastive_loss, lm_loss = criterion(
-                query_emb, target_emb, lm_loss_from_model
+                outputs["query_embedding"], outputs["target_embedding"],
+                outputs["language_model_loss"]
             )
 
             loss.backward()
@@ -172,58 +272,27 @@ def train(
             continue
 
         print("starting validation......")
-        # ---------------------------
-        # VALIDATION
-        # ---------------------------
-        model.eval()
-        val_total_loss = 0
-        val_lm_loss = 0
-        val_contrastive_loss = 0
+        v_total, v_lm, v_nce = _run_validation(model, valloader, criterion, desc="Validating")
 
-        with torch.no_grad():
-            val_pbar = tqdm(valloader, desc="Validating")
-            for batch in val_pbar:
-                image_ref = batch["ref_images"]
-                image_target = batch["trg_images"]
-                text = batch["mod_texts"]
-                target_text = batch["trg_captions"]
+        train_total = epoch_total_loss / counted_batches
+        train_lm = epoch_lm_loss / counted_batches
+        train_nce = epoch_contrastive_loss / counted_batches
 
-                outputs = model(
-                    image_ref=image_ref,
-                    image_target=image_target,
-                    modification_text=text,
-                    target_captions=target_text
-                )
+        print(f"\n[Validation] Total Loss: {v_total:.4f} | LM Loss: {v_lm:.4f} | InfoNCE: {v_nce:.4f}")
+        print(f"[Epoch {epoch+1}] Train Total: {train_total:.4f} | LM: {train_lm:.4f} | InfoNCE: {train_nce:.4f}")
 
-                query_emb = outputs["query_embedding"]
-                target_emb = outputs["target_embedding"]
-                lm_loss_from_model = outputs["language_model_loss"]
+        # ✅ تسجيل بالملف بعد كل epoch كاملة
+        _append_log_row({
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "global_step": global_step,
+            "epoch_label": f"Epoch {epoch+1}",
+            "val_total_loss": f"{v_total:.4f}",
+            "val_lm_loss": f"{v_lm:.4f}",
+            "val_infonce": f"{v_nce:.4f}",
+            "train_total_loss": f"{train_total:.4f}",
+            "train_lm_loss": f"{train_lm:.4f}",
+            "train_infonce": f"{train_nce:.4f}",
+        }, hub_repo_id, push_to_hub)
 
-                loss, contrastive_loss, lm_loss = criterion(
-                    query_emb, target_emb, lm_loss_from_model
-                )
-
-                val_total_loss += loss.item()
-                val_lm_loss += lm_loss.item()
-                val_contrastive_loss += contrastive_loss.item()
-
-                val_pbar.set_postfix({
-                    "val_loss": f"{loss.item():.4f}",
-                    "val_lm": f"{lm_loss.item():.4f}",
-                    "val_InfoNCE": f"{contrastive_loss.item():.4f}"
-                })
-
-        val_total_loss /= len(valloader)
-        val_lm_loss /= len(valloader)
-        val_contrastive_loss /= len(valloader)
-
-        print(f"\n[Validation] Total Loss: {val_total_loss:.4f} | LM Loss: {val_lm_loss:.4f} | InfoNCE: {val_contrastive_loss:.4f}")
-        print(
-            f"[Epoch {epoch+1}] "
-            f"Train Total: {epoch_total_loss/counted_batches:.4f} | "
-            f"LM: {epoch_lm_loss/counted_batches:.4f} | "
-            f"InfoNCE: {epoch_contrastive_loss/counted_batches:.4f}"
-        )
     print("ending of train")
-
     return criterion
