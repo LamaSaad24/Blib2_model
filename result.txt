@@ -163,3 +163,33 @@ Validating: 100%|█| 188/188 [50:02<00:00, 15.97s/it, val_loss=18.8750, val_lm=
 
 Epoch	    آخر step	Val Total Loss	Val LM Loss	   Val InfoNCE	        ملاحظات
 1           	3750	   18.6097	       9.5073       	9.1037	                أول epoch، الذاكرة XBM امتلأت تدريجياً خلالها
+
+Epoch 2/3:  62%|▌| 2335/3750 [1:59:04<8:12:33, 20.89s/it, loss=20.50, lm=9.69, n
+=====================================================================================================================================
+activate XBM gradually
+timestamp,global_step,epoch_label,val_total_loss,val_lm_loss,val_infonce,train_total_loss,train_lm_loss,train_infonce
+2026-09-11T06:59:05,3750,Epoch 1,16.5342,8.7400,7.7994,16.1750,9.2855,6.8881
+2026-09-21T10:35:50,7500,Epoch 2,16.9521,8.7390,8.1912,17.5018,9.2866,8.2202
+2026-09-21T13:36:27,7500,Epoch 2 (recovered),16.9521,8.7390,8.1912,,,
+2026-10-01T04:52:58,11250,Epoch 3 (recovered),16.9508,8.7387,8.1912,,,
+2026-10-05T04:52:26,11250,Epoch 3 (recovered),16.9508,8.7387,8.1912,,,
+
+========================================
+ 🎉 the final model saved successfull! 🎉 
+ 📁 path: outputs/Final_Fashion_Model 
+========================================
+Extracting features for Test Set...
+Evaluating: 100%|█████████████████████████████| 188/188 [31:04<00:00,  9.92s/it]
+
+Computing Similarities and Recall@K for 3000 queries...
+Ranking: 100%|████████████████████████████| 3000/3000 [00:01<00:00, 2040.62it/s]
+
+===================================
+ 🎯 EVALUATION RESULTS 🎯 
+===================================
+Recall@1:   1.80%
+Recall@10:   11.17%
+Recall@50:   30.63%
+Average(10,50): 20.90%
+===================================
+evaluate successfull
